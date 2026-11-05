@@ -221,7 +221,8 @@ def count_inter_list_sizes(systems, force_field,
   start = time.time()
   # get_context("fork") needed for Mac arm processors
   if pool == None:
-    my_pool = get_context("fork").Pool(num_threads)
+    start_method = "spawn" if os.name == "nt" else "fork"
+    my_pool = get_context(start_method).Pool(num_threads)
   else:
     my_pool = pool
   size_dicts = pool_handler_for_inter_list_count(systems, force_field,
@@ -392,6 +393,7 @@ def produce_error_report(filename, tranining_items, indiv_error, geo_index_to_na
   table = tabulate(data_to_print, headers, floatfmt=".2f")
   print(table, file=fptr)
   fptr.close()
+  return data_to_print
 
 
 def preprocess_trainset_line(line):

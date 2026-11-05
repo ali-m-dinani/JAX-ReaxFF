@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as onp
 import time
 import argparse
+import json
 from .smartformatter import SmartFormatter
 from frozendict import frozendict
 from jax_md.reaxff.reaxff_energy import calculate_reaxff_energy
@@ -37,8 +38,17 @@ from jaxreaxff.helper import (move_dataclass, process_and_cluster_geos,
 import math
 from functools import partial
 from jaxreaxff.helper import build_float_range_checker
+from jaxreaxff.checkpoint import ForceFieldCheckpoint
 
-def main():
+def parse_boolean(value):
+  if value.lower() == 'true':
+    return True
+  if value.lower() == 'false':
+    return False
+  raise argparse.ArgumentTypeError('Expected True or False')
+
+
+def create_parser():
   # create parser for command-line arguments
   parser = argparse.ArgumentParser(description='JAX-ReaxFF driver',
                                    formatter_class=SmartFormatter)
@@ -60,7 +70,7 @@ def main():
       default="trainset.in",
       help='Training set file')
   parser.add_argument('--use_valid', metavar='boolean',
-      type=bool,
+      type=parse_boolean,
       default=False,
       help='Flag indicating whether to use validation data (True/False)')
   parser.add_argument('--valid_file', metavar='filename',
@@ -117,6 +127,10 @@ def main():
       type=str,
       default="outputs",
       help='Folder to store the output files')
+  parser.add_argument('--machine_report', metavar='filename',
+      type=str,
+      default=None,
+      help='Write unrounded evaluation data as JSON')
   parser.add_argument('--save_opt', metavar='option',
       choices=['all', 'best'],
       default="best",
@@ -150,10 +164,13 @@ def main():
       default=0,
       help='Seed value')
   
+  return parser
+
+
+def main():
+  parser = create_parser()
   #parse arguments
   args = parser.parse_args()
-  # TODO: remove
-  args.save_opt = "all"
   default_backend = jax.default_backend().lower()
   
   if default_backend == 'cpu':
@@ -346,6 +363,8 @@ def main():
   else:
       optim_options =dict(maxiter=100, disp=False)
   
+  checkpoint = ForceFieldCheckpoint(args.init_FF, args.out_folder,
+                                     force_field, param_indices, args.save_opt)
   for i in range(population_size):
     print('*' * 40)
     print("Trial-{} is starting...".format(i+1))
@@ -368,7 +387,8 @@ def main():
                            validation_data,
                            num_steps, e_minim_flag, opt_method, optim_options,
                            advanced_opts,
-                           new_loss_and_grad_func, minim_func, allocate_func)
+                           new_loss_and_grad_func, minim_func, allocate_func,
+                           checkpoint_callback=partial(checkpoint, i+1))
     end = time.time()
   
     result = {"time":end-start, "value": global_min, 
@@ -437,7 +457,13 @@ def main():
     parse_and_save_force_field(args.init_FF, new_name, new_force_field)
   
     report_name = "{}/report_{}_{}.txt".format(args.out_folder,unique_id,loss_str)
-    produce_error_report(report_name, training_data, indiv_errors, geo_index_to_name)
+    report_rows = produce_error_report(report_name, training_data, indiv_errors, geo_index_to_name)
+    if args.machine_report is not None:
+      with open(args.machine_report, 'w') as report_file:
+        json.dump({'loss': loss, 'items': [
+          {'prediction': float(row[3]), 'target': float(row[2]),
+           'weight': float(row[1])} for row in report_rows
+        ]}, report_file)
   
     # produce the report for the validation data if available
     if args.use_valid:

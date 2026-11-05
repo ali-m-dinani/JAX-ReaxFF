@@ -568,7 +568,7 @@ def train_FF(params, param_indices, param_bounds, force_field,
              validation_data,
              iter_count, e_minim_flag, optimizer, optim_options,
              advanced_opts,
-             loss_and_grad_func, minim_func, allocate_func):
+             loss_and_grad_func, minim_func, allocate_func, checkpoint_callback=None):
   '''
   Main parameter optimization routine
   '''
@@ -660,6 +660,8 @@ def train_FF(params, param_indices, param_bounds, force_field,
       global_min = true_current_loss
       global_min_params = jnp.array(copy.deepcopy(params))
       print("Lowest true total loss so far: {:.2f}".format(global_min))
+      if checkpoint_callback is not None:
+        checkpoint_callback(e, global_min_params, global_min)
     # add noise if stuck
     if (abs(true_current_loss - prev_true_loss)
         / max(true_current_loss, prev_true_loss) < advanced_opts['perc_err_change_thr']):

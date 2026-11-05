@@ -59,7 +59,28 @@ You can learn more about JAX installation here: [JAX install guide](https://gith
 After installing the GPU version, the script will automatically utilize the GPU. If the script does not detect the GPU, it will print a warning message.
 
 
+#### Checkpoints during optimization
+
+Each new best result evaluated at an outer optimization iteration is saved
+automatically in `--out_folder`, including the initial evaluation (iteration 0).
+`checkpoint_FF_best` contains the best force field across trials so far.
+With `--save_opt all`, `checkpoint_FF_trial_1`, `checkpoint_FF_trial_2`, etc.
+also retain each trial's best force field. With `--save_opt best` (the default),
+only the overall best checkpoint is kept for the current run.
+
+Checkpoint files are replaced atomically, so an interrupted write does not
+overwrite the previous complete checkpoint. They use the normal force-field
+format and can be supplied as `--init_FF` with `--init_FF_type fixed` to start
+a new run from the saved parameters. This is not an exact optimizer-state resume.
+Use a different output folder for the new run to preserve previous results.
+Progress inside an unfinished geometry minimization or inner optimizer call is
+not checkpointed. Final force-field files and detailed error reports are still
+written after all trials finish. Existing runs must be restarted to use this feature.
+
 #### Using Validation Data
+`--use_valid True` enables validation; `--use_valid False` disables it.
+These values are case-insensitive. Omitting the flag disables validation.
+
 ```
 jaxreaxff --init_FF Datasets/disulfide/ffield_lit             \
           --params Datasets/disulfide/params                  \
